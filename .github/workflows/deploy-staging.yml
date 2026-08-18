@@ -1,4 +1,4 @@
-name: Stage the app
+name: Deploy to staging
 
 on:
   pull_request:
@@ -6,6 +6,63 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-
     if: contains(github.event.pull_request.labels.*.name, 'stage')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build project
+        run: npm run build
+
+  Build-Docker-Image:
+    if: contains(github.event.pull_request.labels.*.name, 'stage')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        run: |
+          docker build -t ghcr.io/${{ github.actor }}/<username>-azure-ttt:latest .
+          docker push ghcr.io/${{ github.actor }}/<username>-azure-ttt:latest
+
+  Deploy-to-Azure:
+    if: contains(github.event.pull_request.labels.*.name, 'stage')
+    needs: Build-Docker-Image
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_IMAGE_NAME: SSchoppen-azure-ttt
+      AZURE_WEBAPP_NAME: SSchoppen-ttt-app
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          images: ghcr.io/${{ github.actor }}/${{ env.DOCKER_IMAGE_NAME }}:latest
+
+
