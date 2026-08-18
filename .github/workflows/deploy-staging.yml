@@ -1,11 +1,28 @@
-name: Stage the app
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-on:
-  pull_request:
-    types: [labeled]
+      - name: Build and push Docker image
+        run: |
+          docker build -t ghcr.io/${{ github.actor }}/SSchoppen-azure-ttt:latest .
+          docker push ghcr.io/${{ github.actor }}/SSchoppen-azure-ttt:latest
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-
+  Deploy-to-Azure:
     if: contains(github.event.pull_request.labels.*.name, 'stage')
+    needs: Build-Docker-Image
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_IMAGE_NAME: SSchoppen-azure-ttt
+      AZURE_WEBAPP_NAME: SSchoppen-ttt-app
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
